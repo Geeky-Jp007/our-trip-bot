@@ -33,18 +33,15 @@ jobs:
             },
             {
                 "label": "📅 *5th October:* (4 pax)\n🛫 PQC ➡️ SGN",
-                "url": "https://airtrackbot.com/api/search_flights?origin=128667199&originIATA=PQC&originName=Phu+Quoc&destination=95673379&destinationIATA=SGN&destinationName=Ho+Chi+Minh+City&departureDate=2026-10-05&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
-                "
+                "url": "https://airtrackbot.com/api/search_flights?origin=128667199&originIATA=PQC&originName=Phu+Quoc&destination=95673379&destinationIATA=SGN&destinationName=Ho+Chi+Minh+City&departureDate=2026-10-05&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
             },
             {
                 "label": "📅 *7th October:* (4 pax)\n🛫 SGN ➡️ HAN",
-                "url": "https://airtrackbot.com/api/search_flights?origin=95673379&originIATA=SGN&originName=Ho+Chi+Minh+City&destination=128668079&destinationIATA=HAN&destinationName=Hanoi&departureDate=2026-10-07&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
-                "
+                "url": "https://airtrackbot.com/api/search_flights?origin=95673379&originIATA=SGN&originName=Ho+Chi+Minh+City&destination=128668079&destinationIATA=HAN&destinationName=Hanoi&departureDate=2026-10-07&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
             },
             {
                 "label": "📅 *11th October:* (3 pax)\n🛫 HAN ➡️ DEL",
-                "url": "https://airtrackbot.com/api/search_flights?origin=128668079&originIATA=HAN&originName=Hanoi&destination=95673498&destinationIATA=DEL&destinationName=Delhi+Indira+Gandhi+International&departureDate=2026-10-11&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
-                "
+                "url": "https://airtrackbot.com/api/search_flights?origin=128668079&originIATA=HAN&originName=Hanoi&destination=95673498&destinationIATA=DEL&destinationName=Delhi+Indira+Gandhi+International&departureDate=2026-10-11&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
             }
         ]
 
