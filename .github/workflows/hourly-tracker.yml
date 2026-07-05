@@ -2,7 +2,7 @@ name: Hourly Flight Price Tracker
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '34 * * * *'
   workflow_dispatch:
 
 jobs:
