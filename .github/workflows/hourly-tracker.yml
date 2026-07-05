@@ -2,25 +2,97 @@ name: Hourly Flight Price Tracker
 
 on:
   schedule:
-    # Runs automatically at minute 0 of every hour
     - cron: '0 * * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
   track:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository code
-      uses: actions/checkout@v4
-
-    - name: Set up Node.js environment
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Run flight tracker script
+    - name: Fetch Flights and Notify Telegram
       env:
         TELEGRAM_TO_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
         TELEGRAM_TO_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
-      run: node tracker.js
+      shell: python
+      run: |
+        import os
+        import ssl
+        import json
+        import urllib.request
+
+        token = os.environ.get("TELEGRAM_TO_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_TO_CHATID")
+        
+        api_url = "https://airtrackbot.com/api/search_flights?origin=95673498&originIATA=DEL&originName=Delhi+Indira+Gandhi+International&destination=128667199&destinationIATA=PQC&destinationName=Phu+Quoc&departureDate=2026-10-01&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+
+        try:
+            print("🛰️ Fetching live flight data from endpoint...")
+            req = urllib.request.Request(api_url, headers=headers)
+            context = ssl._create_unverified_context()
+            
+            with urllib.request.urlopen(req, context=context) as response:
+                raw_data = response.read().decode("utf-8")
+                
+                # Check for structural HTML wrapper blocks (Cloudflare page limits)
+                if raw_data.strip().startswith("<"):
+                    print("❌ Error: Received HTML webpage layout instead of JSON data.")
+                    print(raw_data[:300])
+                    exit(1)
+                
+                data = json.loads(raw_data)
+                
+                # Handle alternative flight data array labels safely
+                flights = data.get("flights") or data.get("results") or data.get("data") or []
+                
+                if not flights:
+                    print("⚠️ No flights found in the API response payload.")
+                    exit(0)
+
+                print("📊 Sorting and extracting the top 2 cheapest flight options...")
+                # Sort ascending by treating the price key explicitly as a float object
+                flights.sort(key=lambda x: float(x.get("price", 999999)))
+                cheapest_flights = flights[:2]
+
+                # Format the final Markdown text structure layout
+                message = "✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n"
+                for index, flight in enumerate(cheapest_flights):
+                    airline = flight.get("airline") or flight.get("marketingCarrier") or "Unknown Airline"
+                    price = flight.get("price", "N/A")
+                    departs = flight.get("departureTime") or flight.get("departs_at") or "N/A"
+                    
+                    message += f"*{index + 1}. {airline}*\n"
+                    message += f"💰 Price: ₹{price}\n"
+                    message += f"🕒 Departure: {departs}\n\n"
+
+                print("🚀 Forwarding the flight parameters to Telegram...")
+                telegram_url = f"https://telegram.org{token}/sendMessage"
+                
+                # Format payload maps as strict JSON strings
+                tele_payload = json.dumps({
+                    "chat_id": chat_id,
+                    "text": message,
+                    "parse_mode": "Markdown"
+                }).encode("utf-8")
+
+                tele_req = urllib.request.Request(
+                    telegram_url, 
+                    data=tele_payload, 
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                with urllib.request.urlopen(tele_req, context=context) as tele_res:
+                    if tele_res.status == 200:
+                        print("✅ Success! Flight pricing card distributed directly to your Telegram group.")
+                    else:
+                        print(f"❌ Failed to notify Telegram. Server status code: {tele_res.status}")
+
+        except Exception as e:
+            print(f"❌ Execution Block Interrupted: {e}")
+            exit(1)
