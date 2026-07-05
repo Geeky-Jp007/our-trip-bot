@@ -1,0 +1,25 @@
+name: Hourly Flight Price Tracker
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Run flight tracker script
+      env:
+        TELEGRAM_TO_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
+        TELEGRAM_TO_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
+      run: node tracker.js
