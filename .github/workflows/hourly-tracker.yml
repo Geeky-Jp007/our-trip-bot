@@ -10,36 +10,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Fetch Flights and Notify Telegram
+    - name: Fetch Flights, Log Response, and Notify
       env:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
         TELEGRAM_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
       run: |
-        # 1. Fetch live API payload using a secure browser handshake setup
         API_URL="https://airtrackbot.com"
         
+        echo "=== STEP 1: Sending curl request to AirTrackBot ==="
         RESPONSE=$(curl -s -L \
           -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
           -H "Accept: application/json" \
           "$API_URL")
 
-        # 2. Extract and format the top 2 cheapest flights via pre-installed jq engine
-        FLIGHTS_DATA=$(echo "$RESPONSE" | jq -r '
-          (.flights // .results // []) | 
-          sort_by(.price | tonumber) | 
-          .[0:2] | 
-          map("✈️ *Airline:* \(.airline // .marketingCarrier // "Unknown")\n💰 *Price:* ₹\(.price)\n🕒 *Departure:* \(.departureTime // .departs_at // "N/A")\n") | 
-          join("\n")
-        ')
+        echo "=== STEP 2: RAW RESPONSE FROM API ==="
+        echo "$RESPONSE"
+        echo "======================================"
 
-        if [ -z "$FLIGHTS_DATA" ]; then
-          FLIGHTS_DATA="No flight price results parsed from the endpoint feed."
+        # Safety intercept check to see if the response is HTML
+        if echo "$RESPONSE" | grep -qiE "(<!DOCTYPE|<html>)"; then
+          echo "❌ Critical Info: The server returned HTML! Bypassing parsing to prevent jq from crashing."
+          MESSAGE="⚠️ *Flight Tracker Alert*\n\nThe AirTrackBot API blocked the automated runner server with a Cloudflare security page."
+        else
+          echo "=== STEP 3: Parsing payload with jq ==="
+          FLIGHTS_DATA=$(echo "$RESPONSE" | jq -r '
+            (.flights // .results // []) | 
+            sort_by(.price | tonumber) | 
+            .[0:2] | 
+            map("✈️ *Airline:* \(.airline // "Unknown")\n💰 *Price:* ₹\(.price)\n🕒 *Departure:* \(.departureTime // "N/A")\n") | 
+            join("\n")
+          ')
+
+          if [ -z "$FLIGHTS_DATA" ]; then
+            MESSAGE="⚠️ *Flight Tracker Alert*\n\nAPI connected successfully, but no matching flight flights array could be parsed."
+          else
+            MESSAGE="✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n$FLIGHTS_DATA"
+          fi
         fi
 
-        # 3. Compile a clean message layout 
-        MESSAGE="✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n$FLIGHTS_DATA"
-
-        # 4. Dispatch payload straight to your Telegram Group
+        echo "=== STEP 4: Sending final notification status to Telegram ==="
         curl -s -X POST "https://telegram.org{TELEGRAM_TOKEN}/sendMessage" \
           -H "Content-Type: application/json" \
           -d "$(jq -n --arg chat_id "$TELEGRAM_CHATID" --arg text "$MESSAGE" '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')"
