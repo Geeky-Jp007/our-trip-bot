@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Fetch Flights and Notify Telegram
+    - name: Fetch All 4 Flights and Notify Telegram
       env:
         TELEGRAM_TO_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
         TELEGRAM_TO_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
@@ -24,8 +24,29 @@ jobs:
 
         token = os.environ.get("TELEGRAM_TO_TOKEN")
         chat_id = os.environ.get("TELEGRAM_TO_CHATID")
-        
-        api_url = "https://airtrackbot.com/api/search_flights?origin=95673498&originIATA=DEL&originName=Delhi+Indira+Gandhi+International&destination=128667199&destinationIATA=PQC&destinationName=Phu+Quoc&departureDate=2026-10-01&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
+
+        # Configured 4 separate target URL endpoints with correct dates and passenger distributions
+        routes = [
+            {
+                "label": "📅 *1st October:* (4 pax)\n🛫 DEL ➡️ PQC",
+                "url": "https://airtrackbot.com/api/search_flights?origin=95673498&originIATA=DEL&originName=Delhi+Indira+Gandhi+International&destination=128667199&destinationIATA=PQC&destinationName=Phu+Quoc&departureDate=2026-10-01&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker"
+            },
+            {
+                "label": "📅 *5th October:* (4 pax)\n🛫 PQC ➡️ SGN",
+                "url": "https://airtrackbot.com/api/search_flights?origin=128667199&originIATA=PQC&originName=Phu+Quoc&destination=95673379&destinationIATA=SGN&destinationName=Ho+Chi+Minh+City&departureDate=2026-10-05&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
+                "
+            },
+            {
+                "label": "📅 *7th October:* (4 pax)\n🛫 SGN ➡️ HAN",
+                "url": "https://airtrackbot.com/api/search_flights?origin=95673379&originIATA=SGN&originName=Ho+Chi+Minh+City&destination=128668079&destinationIATA=HAN&destinationName=Hanoi&departureDate=2026-10-07&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
+                "
+            },
+            {
+                "label": "📅 *11th October:* (3 pax)\n🛫 HAN ➡️ DEL",
+                "url": "https://airtrackbot.com/api/search_flights?origin=128668079&originIATA=HAN&originName=Hanoi&destination=95673498&destinationIATA=DEL&destinationName=Delhi+Indira+Gandhi+International&departureDate=2026-10-11&flightClass=economy&adults=1&country=IN&currency=INR&source=tracker
+                "
+            }
+        ]
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -33,64 +54,72 @@ jobs:
             "X-Requested-With": "XMLHttpRequest"
         }
 
+        context = ssl._create_unverified_context()
+        message = "✈️ *Your Complete Trip Itinerary Tracker*\n============================\n\n"
+
+        # Sequential processing for each flight target parameters
+        for route in routes:
+            try:
+                print(f"🛰️ Executing data pull for segment: {route['label'].splitlines()[0]}")
+                req = urllib.request.Request(route["url"], headers=headers)
+                
+                with urllib.request.urlopen(req, context=context) as response:
+                    raw_data = response.read().decode("utf-8")
+                    data = json.loads(raw_data)
+                    flights = data.get("flights", [])
+                    
+                    if flights:
+                        # Extract absolute cheapest flight from array response map
+                        flights.sort(key=lambda x: float(x.get("price", 999999)))
+                        cheapest = flights[0]
+                        
+                        price = cheapest.get("price", "N/A")
+                        booking_link = cheapest.get("link") or "https://skyscanner.net"
+                        
+                        legs = cheapest.get("legs", [{}])
+                        first_leg = legs[0] if legs else {}
+                        
+                        airline = first_leg.get("airlineName") or first_leg.get("airline", "Unknown Airline")
+                        departs_raw = first_leg.get("departureDate", "N/A")
+                        
+                        departs = departs_raw
+                        if "T" in str(departs_raw):
+                            departs = str(departs_raw).replace("T", " ")[:16]
+                        
+                        # Formatting individual segment cards string
+                        message += f"{route['label']}\n"
+                        message += f"🥇 Airline: {airline}\n"
+                        message += f"💰 Price: ₹{price}\n"
+                        message += f"🕒 Departure: {departs}\n"
+                        message += f"🔗 [Click Here to Book This Flight]({booking_link})\n\n"
+                    else:
+                        message += f"{route['label']}\n⚠️ No live flights found for this specific date sector.\n\n"
+                        
+            except Exception as sector_error:
+                print(f"❌ Failed to parse data sector route profile: {sector_error}")
+                message += f"{route['label']}\n❌ Network fetch or firewall parsing error.\n\n"
+
         try:
-            print("🛰️ Fetching live flight data from endpoint...")
-            req = urllib.request.Request(api_url, headers=headers)
-            context = ssl._create_unverified_context()
+            print("🚀 Delivering complete compiled multi-flight report blocks to Telegram API...")
+            conn = http.client.HTTPSConnection("api.telegram.org", context=context)
             
-            with urllib.request.urlopen(req, context=context) as response:
-                raw_data = response.read().decode("utf-8")
-                data = json.loads(raw_data)
-                
-                flights = data.get("flights", [])
-                if not flights:
-                    print("⚠️ Flights array empty.")
-                    exit(0)
+            tele_payload = json.dumps({
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True
+            })
+            
+            path = f"/bot{token}/sendMessage"
+            conn.request("POST", path, body=tele_payload, headers={"Content-Type": "application/json"})
+            
+            tele_res = conn.getresponse()
+            if tele_res.status == 200:
+                print("✅ Success! Full multi-city itinerary alert posted to your Telegram group.")
+            else:
+                print(f"❌ Failed to notify Telegram. Status: {tele_res.status}")
+            conn.close()
 
-                print("📊 Sorting and extracting top 2 cheapest options...")
-                # Sort ascending by treating the price key explicitly as a float object
-                flights.sort(key=lambda x: float(x.get("price", 999999)))
-                cheapest_flights = flights[:2]
-
-                message = "✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n"
-                for index, flight in enumerate(cheapest_flights):
-                    price = flight.get("price", "N/A")
-                    
-                    # Extracting from the nested 'legs' array based on your exact schema
-                    legs = flight.get("legs", [{}])
-                    first_leg = legs[0] if legs else {}
-                    
-                    airline = first_leg.get("airlineName", "Unknown Airline")
-                    departs_raw = first_leg.get("departureDate", "N/A")
-                    
-                    # Clean up ISO timestamp strings (2026-10-01T23:35:00+00:00 -> 2026-10-01 23:35)
-                    departs = departs_raw
-                    if "T" in str(departs_raw):
-                        departs = str(departs_raw).replace("T", " ")[:16]
-
-                    message += f"*{index + 1}. {airline}*\n"
-                    message += f"💰 Price: ₹{price}\n"
-                    message += f"🕒 Departure: {departs}\n\n"
-
-                print("🚀 Forwarding the flight parameters to Telegram...")
-                conn = http.client.HTTPSConnection("api.telegram.org", context=context)
-                
-                tele_payload = json.dumps({
-                    "chat_id": chat_id,
-                    "text": message,
-                    "parse_mode": "Markdown"
-                })
-                
-                path = f"/bot{token}/sendMessage"
-                conn.request("POST", path, body=tele_payload, headers={"Content-Type": "application/json"})
-                
-                tele_res = conn.getresponse()
-                if tele_res.status == 200:
-                    print("✅ Success! Clean data delivered to Telegram.")
-                else:
-                    print(f"❌ Failed to notify Telegram. Status: {tele_res.status}")
-                conn.close()
-
-        except Exception as e:
-            print(f"❌ Execution Block Interrupted: {e}")
+        except Exception as telegram_error:
+            print(f"❌ Critical Telegram failure: {telegram_error}")
             exit(1)
