@@ -10,16 +10,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository code
-      uses: actions/checkout@v4
-
-    - name: Set up Node.js environment
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Run flight tracker script
+    - name: Fetch Flights and Notify Telegram
       env:
-        TELEGRAM_TO_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
-        TELEGRAM_TO_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
-      run: node tracker.js
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TO_TOKEN }}
+        TELEGRAM_CHATID: ${{ secrets.TELEGRAM_TO_CHATID }}
+      run: |
+        # 1. Fetch live API payload using a secure browser handshake setup
+        API_URL="https://airtrackbot.com"
+        
+        RESPONSE=$(curl -s -L \
+          -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+          -H "Accept: application/json" \
+          "$API_URL")
+
+        # 2. Extract and format the top 2 cheapest flights via pre-installed jq engine
+        FLIGHTS_DATA=$(echo "$RESPONSE" | jq -r '
+          (.flights // .results // []) | 
+          sort_by(.price | tonumber) | 
+          .[0:2] | 
+          map("✈️ *Airline:* \(.airline // .marketingCarrier // "Unknown")\n💰 *Price:* ₹\(.price)\n🕒 *Departure:* \(.departureTime // .departs_at // "N/A")\n") | 
+          join("\n")
+        ')
+
+        if [ -z "$FLIGHTS_DATA" ]; then
+          FLIGHTS_DATA="No flight price results parsed from the endpoint feed."
+        fi
+
+        # 3. Compile a clean message layout 
+        MESSAGE="✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n$FLIGHTS_DATA"
+
+        # 4. Dispatch payload straight to your Telegram Group
+        curl -s -X POST "https://telegram.org{TELEGRAM_TOKEN}/sendMessage" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -n --arg chat_id "$TELEGRAM_CHATID" --arg text "$MESSAGE" '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')"
