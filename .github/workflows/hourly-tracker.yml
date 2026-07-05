@@ -40,36 +40,39 @@ jobs:
             
             with urllib.request.urlopen(req, context=context) as response:
                 raw_data = response.read().decode("utf-8")
-                
-                if raw_data.strip().startswith("<"):
-                    print("❌ Error: Received HTML webpage layout instead of JSON data.")
-                    exit(1)
-                
                 data = json.loads(raw_data)
-                flights = data.get("flights") or data.get("results") or data.get("data") or []
                 
+                flights = data.get("flights", [])
                 if not flights:
-                    print("⚠️ No flights found in the API response payload.")
+                    print("⚠️ Flights array empty.")
                     exit(0)
 
-                print("📊 Sorting and extracting the top 2 cheapest flight options...")
+                print("📊 Sorting and extracting top 2 cheapest options...")
+                # Sort ascending by treating the price key explicitly as a float object
                 flights.sort(key=lambda x: float(x.get("price", 999999)))
                 cheapest_flights = flights[:2]
 
                 message = "✈️ *Cheapest Flights Found (DEL -> PQC)*\n\n"
                 for index, flight in enumerate(cheapest_flights):
-                    airline = flight.get("airline") or flight.get("marketingCarrier") or "Unknown Airline"
                     price = flight.get("price", "N/A")
-                    departs = flight.get("departureTime") or flight.get("departs_at") or "N/A"
                     
+                    # Extracting from the nested 'legs' array based on your exact schema
+                    legs = flight.get("legs", [{}])
+                    first_leg = legs[0] if legs else {}
+                    
+                    airline = first_leg.get("airlineName", "Unknown Airline")
+                    departs_raw = first_leg.get("departureDate", "N/A")
+                    
+                    # Clean up ISO timestamp strings (2026-10-01T23:35:00+00:00 -> 2026-10-01 23:35)
+                    departs = departs_raw
+                    if "T" in str(departs_raw):
+                        departs = str(departs_raw).replace("T", " ")[:16]
+
                     message += f"*{index + 1}. {airline}*\n"
                     message += f"💰 Price: ₹{price}\n"
-                    message += f"🕒 Departure: ${departs}\n\n"
+                    message += f"🕒 Departure: {departs}\n\n"
 
                 print("🚀 Forwarding the flight parameters to Telegram...")
-                
-                # Bypassing urllib URL parsing entirely by using a direct HTTPS connection pool
-                # This completely prevents the "nonnumeric port" error caused by tokens with colons
                 conn = http.client.HTTPSConnection("api.telegram.org", context=context)
                 
                 tele_payload = json.dumps({
@@ -83,9 +86,9 @@ jobs:
                 
                 tele_res = conn.getresponse()
                 if tele_res.status == 200:
-                    print("✅ Success! Flight pricing card distributed directly to your Telegram group.")
+                    print("✅ Success! Clean data delivered to Telegram.")
                 else:
-                    print(f"❌ Failed to notify Telegram. Server status code: {tele_res.status}")
+                    print(f"❌ Failed to notify Telegram. Status: {tele_res.status}")
                 conn.close()
 
         except Exception as e:
